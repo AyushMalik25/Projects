@@ -1,0 +1,74 @@
+import cv2
+import face_recognition
+import numpy as np
+import pandas as pd
+from datetime import datetime
+
+# Initialize attendance DataFrame
+attendance_df = pd.DataFrame(columns=["Name", "Date", "Time"])
+
+# Function to mark attendance
+def mark_attendance(name):
+    now = datetime.now()
+    date = now.strftime("%Y-%m-%d")
+    time = now.strftime("%H:%M:%S")
+    
+    # Check if the person is already marked for the day
+    if not ((attendance_df["Name"] == name) & (attendance_df["Date"] == date)).any():
+        new_row = {"Name": name, "Date": date, "Time": time}
+        global attendance_df
+        attendance_df = attendance_df.append(new_row, ignore_index=True)
+        attendance_df.to_csv("Attendance.csv", index=False)
+
+# Load known face images and their names
+known_face_encodings = []
+known_face_names = []
+
+# Load sample images and encode them
+person1_image = face_recognition.load_image_file("person1.jpg")
+person1_encoding = face_recognition.face_encodings(person1_image)[0]
+known_face_encodings.append(person1_encoding)
+known_face_names.append("Person 1")
+
+person2_image = face_recognition.load_image_file("person2.jpg")
+person2_encoding = face_recognition.face_encodings(person2_image)[0]
+known_face_encodings.append(person2_encoding)
+known_face_names.append("Person 2")
+
+# Initialize webcam feed
+video_capture = cv2.VideoCapture(0)
+
+while True:
+    ret, frame = video_capture.read()
+    
+    # Convert frame to RGB for face_recognition
+    rgb_frame = frame[:, :, ::-1]
+    
+    # Find all faces and their encodings in the current frame
+    face_locations = face_recognition.face_locations(rgb_frame)
+    face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
+    
+    for face_encoding, face_location in zip(face_encodings, face_locations):
+        matches = face_recognition.compare_faces(known_face_encodings, face_encoding)
+        name = "Unknown"
+        
+        face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
+        best_match_index = np.argmin(face_distances)
+        if matches[best_match_index]:
+            name = known_face_names[best_match_index]
+        
+        mark_attendance(name)
+        
+        # Draw rectangle around the face
+        top, right, bottom, left = face_location
+        cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
+        cv2.putText(frame, name, (left + 6, bottom - 6), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 1)
+
+    # Display the video feed
+    cv2.imshow('Video', frame)
+    
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+video_capture.release()
+cv2.destroyAllWindows()
